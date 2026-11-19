@@ -24,16 +24,21 @@ jobs:
           distribution: temurin
           java-version: "21"
 
-      - name: Accept Android SDK licenses
+      - name: Set up Android SDK & licenses
         run: |
           set +o pipefail
           SDK_DIR="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-/usr/local/lib/android/sdk}}"
+          if [ ! -w "$SDK_DIR" ]; then
+            sudo chown -R "$(id -u):$(id -g)" "$SDK_DIR"
+          fi
           SDKMANAGER=$(command -v sdkmanager || find "$SDK_DIR" -name sdkmanager -type f 2>/dev/null | head -n 1)
           if [ -z "$SDKMANAGER" ]; then
             echo "sdkmanager not found under $SDK_DIR"
             exit 1
           fi
-          yes | "$SDKMANAGER" --licenses
+          yes | "$SDKMANAGER" --sdk_root="$SDK_DIR" --licenses
+          "$SDKMANAGER" --sdk_root="$SDK_DIR" "platform-tools" "platforms;android-36" "build-tools;36.0.0" || true
+          "$SDKMANAGER" --sdk_root="$SDK_DIR" "platforms;android-36.1" || true
 
       - name: Set up Gradle 9.3.1
         uses: gradle/actions/setup-gradle@v4
@@ -41,10 +46,16 @@ jobs:
           gradle-version: "9.3.1"
 
       - name: Decode signing keystore
-        run: base64 -d debug.keystore.base64 > debug.keystore
+        run: |
+          base64 -d debug.keystore.base64 > debug.keystore
+          ls -lh debug.keystore
 
       - name: Build APK
-        run: gradle assembleDebug --no-daemon
+        run: |
+          gradle --version
+          gradle assembleDebug --no-daemon --stacktrace \
+            -Dorg.gradle.jvmargs="-Xmx2560m -XX:MaxMetaspaceSize=768m -Dfile.encoding=UTF-8" \
+            -Dorg.gradle.workers.max=2
 
       - name: Prepare APK artifact
         run: |
