@@ -109,3 +109,6 @@ app/src/main/java/com/example/
    gradle :app:testDebugUnitTest
    ```
 
+### Releases
+Every push to `main` automatically compiles an installable APK via GitHub Actions and publishes it under the repository's **Releases** page.
+
