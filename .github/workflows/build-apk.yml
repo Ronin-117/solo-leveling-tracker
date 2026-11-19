@@ -45,9 +45,37 @@ jobs:
         with:
           gradle-version: "9.3.1"
 
-      - name: Decode signing keystore
+      - name: Restore cached fallback keystore
+        if: hashFiles('debug.keystore.base64') == ''
+        uses: actions/cache@v4
+        with:
+          path: debug.keystore
+          key: ci-debug-keystore-v1
+
+      - name: Prepare signing keystore
+        env:
+          DEBUG_KEYSTORE_BASE64: ${{ secrets.DEBUG_KEYSTORE_BASE64 }}
         run: |
-          base64 -d debug.keystore.base64 > debug.keystore
+          if [ -f debug.keystore.base64 ]; then
+            echo "Decoding debug.keystore.base64 from repository..."
+            base64 -d debug.keystore.base64 > debug.keystore
+          elif [ -n "$DEBUG_KEYSTORE_BASE64" ]; then
+            echo "Decoding DEBUG_KEYSTORE_BASE64 from GitHub secret..."
+            printf '%s' "$DEBUG_KEYSTORE_BASE64" | tr -d '[:space:]' | base64 -d > debug.keystore
+          elif [ ! -f debug.keystore ]; then
+            echo "Generating fallback debug.keystore with keytool..."
+            keytool -genkeypair -noprompt \
+              -keystore debug.keystore \
+              -storepass android \
+              -alias androiddebugkey \
+              -keypass android \
+              -keyalg RSA \
+              -keysize 2048 \
+              -validity 10000 \
+              -dname "CN=Android Debug,O=Android,C=US"
+          else
+            echo "Using cached fallback debug.keystore."
+          fi
           ls -lh debug.keystore
 
       - name: Build APK
